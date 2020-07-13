@@ -4,7 +4,10 @@ import (
     "strings"
     "image"
     "time"
-    
+    "io"
+    "encoding/hex"
+    "crypto/md5"
+
     "gopkg.in/toast.v1"
     "github.com/gocolly/colly"
     "golang.org/x/text/encoding/korean"
@@ -22,6 +25,7 @@ var (
     passEd nucular.TextEditor
     start bool
     failReason string
+    alarmList map[string]bool
  )
 
 func main() {
@@ -29,6 +33,7 @@ func main() {
     passEd.Flags = nucular.EditField
 
     start = false
+    alarmList = make(map[string]bool)
 
     wnd := nucular.NewMasterWindowSize(0, "ClienAlarm", image.Point{200,138} ,updatefn)
     wnd.SetStyle(style.FromTheme(style.DarkTheme, 2.0))
@@ -101,23 +106,32 @@ func getNewAlaram() {
         alarm_collector := login_collector.Clone()
         alarm_collector.OnHTML("div[class]", func(e *colly.HTMLElement) {
             if e.Attr("class") == "list_item unread cursor" {  
-                sTemp := strings.ReplaceAll(e.Attr("onclick"), "app.commentAlarmLink(", "")
-                sTemp  = strings.ReplaceAll(sTemp, ")", "")
-                sTemp  = strings.ReplaceAll(sTemp, "'", "")
-                sTemp  = strings.ReplaceAll(sTemp, " ", "")
-                Split := strings.Split(sTemp, ",")             
+                h := md5.New()
+                io.WriteString(h, e.Attr("onclick"))
+                key := hex.EncodeToString(h.Sum(nil))                
+                if _, ok := alarmList[key]; !ok {
+                    sTemp := strings.ReplaceAll(e.Attr("onclick"), "app.commentAlarmLink(", "")
+                    sTemp  = strings.ReplaceAll(sTemp, ")", "")
+                    sTemp  = strings.ReplaceAll(sTemp, "'", "")
+                    sTemp  = strings.ReplaceAll(sTemp, " ", "")
+                    Split := strings.Split(sTemp, ",")             
 
-                sTitle, _ := euckrEnc.String("안읽은알람") 
-                sMenu, _  := euckrEnc.String("보러가기") 
-                sEUCKR, _ := euckrEnc.String(e.ChildText("div div a span")) 
-                notification := toast.Notification{
-                    Title:   sTitle,
-                    Message: sEUCKR,
-                    Actions: []toast.Action{
-                        {"protocol", sMenu, "https://www.clien.net/service/board/" + Split[0] + "/" + Split[1]},
-                       },
-                }                
-                notification.Push()
+                    sTitle, _ := euckrEnc.String("안읽은알람") 
+                    sMenu, _  := euckrEnc.String("보러가기") 
+                    sEUCKR, _ := euckrEnc.String(e.ChildText("div div a span")) 
+                    notification := toast.Notification{
+                        Title:   sTitle,
+                        Message: sEUCKR,
+                        Actions: []toast.Action{
+                            {"protocol", sMenu, "https://www.clien.net/service/board/" + Split[0] + "/" + Split[1]},
+                           },
+                    }
+                                       
+                    notification.Push()
+                    alarmList[key] = true
+                }        
+                
+                
             }
         })
 
